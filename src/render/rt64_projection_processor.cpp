@@ -116,7 +116,9 @@ namespace RT64 {
 
             interop::float4x4 &prevViewTransform = drawData.prevViewTransforms[proj.transformsIndex];
             interop::float4x4 &prevProjTransform = drawData.prevProjTransforms[proj.transformsIndex];
+            bool interpolatedProjection = false;
             if ((prevProjMatrix != nullptr) && (prevViewMatrix != nullptr) && (rigidBody != nullptr)) {
+                interpolatedProjection = true;
                 const interop::float4x4 curViewTransform = viewMatrix;
                 const interop::float4x4 curProjTransform = projMatrix;
                 interop::float4x4 adjustedPrevProj = *prevProjMatrix;
@@ -140,7 +142,17 @@ namespace RT64 {
                 prevProjTransform = projMatrix;
             }
 
-            viewProjMatrix = hlslpp::mul(viewMatrix, projMatrix);
+            // The view and projection matrices come from decomposing the game's combined view-projection matrix, and multiplying them
+            // back together loses precision in the depth row when the camera is far from the geometry (huge W). Fragments then end up
+            // outside of the [0, 1] depth range on some frames and are discarded by the pixel shader's depth clip. Aspect adjustment
+            // only scales the X column, so when nothing was interpolated, scale the exact original combined matrix instead.
+            if (!interpolatedProjection && !workload.debuggerCamera.enabled) {
+                viewProjMatrix = drawData.viewProjTransforms[proj.transformsIndex];
+                adjustProjectionMatrix(viewProjMatrix, projRatioScale);
+            }
+            else {
+                viewProjMatrix = hlslpp::mul(viewMatrix, projMatrix);
+            }
 
             interop::float4x4 &prevViewProjTransform = drawData.prevViewProjTransforms[proj.transformsIndex];
             prevViewProjTransform = hlslpp::mul(prevViewTransform, prevProjTransform);
